@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Công Cụ Sửa Chữ PDF Scan Online (Khớp Màu & Font Tự Động)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; display: flex; height: 100vh; background: #141418; color: #f0f0f5; overflow: hidden; }
+    #sidebar {
+      width: 375px; background: #22222b; padding: 14px; overflow-y: auto;
+      border-right: 1px solid #353545; display: flex; flex-direction: column; gap: 10px;
+      flex-shrink: 0;
+    }
+    h2 { margin: 0 0 2px 0; font-size: 16px; color: #60a5fa; display: flex; align-items: center; gap: 6px; }
+    .hint { font-size: 11.5px; color: #9ca3af; line-height: 1.4; }
+    .group {
+      background: #1a1a22; padding: 11px; border-radius: 8px;
+      border: 1px solid #2e2e3d; display: flex; flex-direction: column; gap: 8px;
+    }
+    .group-title { font-size: 12.5px; font-weight: 700; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.4px; }
+    label { font-size: 12px; color: #d1d5db; display: flex; justify-content: space-between; align-items: center; }
+    input[type="text"], select {
+      width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #45455a;
+      background: #121217; color: #fff; font-size: 13.5px; outline: none;
+    }
+    input[type="text"]:focus, select:focus { border-color: #3b82f6; }
+    input[type="range"] { width: 100%; accent-color: #3b82f6; cursor: pointer; margin: 0; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    button {
+      padding: 8px 11px; border-radius: 6px; border: none; font-weight: 600;
+      cursor: pointer; font-size: 12.5px; transition: 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .btn-primary { background: #2563eb; color: white; width: 100%; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-success { background: #16a34a; color: white; width: 100%; }
+    .btn-success:hover { background: #15803d; }
+    .btn-secondary { background: #373748; color: #e5e7eb; flex: 1; }
+    .btn-secondary:hover { background: #4b4b60; }
+    #main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #toolbar {
+      height: 46px; background: #1c1c24; border-bottom: 1px solid #2e2e3d;
+      display: flex; align-items: center; justify-content: space-between; padding: 0 16px; gap: 12px;
+    }
+    #workspace {
+      flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start;
+      padding: 24px; position: relative; background: #111115;
+    }
+    #canvas-container { position: relative; box-shadow: 0 10px 36px rgba(0,0,0,0.7); transform-origin: top center; }
+    canvas { display: block; cursor: crosshair; }
+    .badge { background: #3b82f628; color: #93c5fd; padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 11.5px; }
+    #dropzone {
+      border: 2px dashed #45455a; border-radius: 8px; padding: 12px; text-align: center;
+      cursor: pointer; transition: 0.2s; background: #14141c; font-size: 12.5px; color: #9ca3af;
+    }
+    #dropzone:hover, #dropzone.dragover { border-color: #3b82f6; color: #fff; background: #1e293b44; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div>
+      <h2>🛠️ Sửa Chữ PDF Scan Pro</h2>
+      <div class="hint">Tự động khớp màu nền giấy scan, màu mực in, độ nghiêng và độ nhòe chữ. Chạy 100% trên trình duyệt.</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">1. Tải file PDF hoặc Ảnh</div>
+      <div id="dropzone" onclick="document.getElementById('fileInput').click()">
+        📄 Bấm chọn hoặc kéo thả file <b>PDF / Ảnh</b> vào đây
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,image/*" style="display:none" />
+      <div class="row" id="pageControls" style="display:none;">
+        <button class="btn-secondary" id="prevPage">◀ Trước</button>
+        <span id="pageInfo" style="font-size:12px; white-space:nowrap;">Trang 1 / 1</span>
+        <button class="btn-secondary" id="nextPage">Sau ▶</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">2. Khoanh vùng & Lấy màu</div>
+      <div class="hint">Kéo chuột trên văn bản để khoanh dòng chữ cũ cần xóa và thay thế.</div>
+      <div class="row">
+        <label style="flex:1;">Màu mực scan: <input type="color" id="inkColor" value="#10133c" /></label>
+        <button class="btn-secondary" id="autoSampleBtn" style="flex:0 0 auto;">🔄 Tự hút màu</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">3. Nội dung & Khớp Font Scan</div>
+      <input type="text" id="newText" placeholder="Nhập nội dung mới (VD: 46 Lệ Ninh...)" />
+
+      <label>Font chữ:
+        <select id="fontFamily" style="width:195px;">
+          <option value="'Times New Roman', Times, serif">Times New Roman (Chuẩn HĐ)</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="Calibri, sans-serif">Calibri</option>
+          <option value="'Courier New', monospace">Courier New</option>
+        </select>
+      </label>
+
+      <div class="row">
+        <label style="flex:1; justify-content:flex-start; gap:6px;"><input type="checkbox" id="isBold" /> <b>In đậm</b></label>
+        <label style="flex:1; justify-content:flex-start; gap:6px;"><input type="checkbox" id="isItalic" /> <i>In nghiêng</i></label>
+      </div>
+
+      <label>Cỡ chữ (px): <span class="badge" id="fontSizeVal">28</span></label>
+      <input type="range" id="fontSize" min="10" max="80" step="0.25" value="28" />
+
+      <label>Độ nghiêng dòng (Angle): <span class="badge" id="angleVal">-0.8°</span></label>
+      <input type="range" id="angle" min="-5" max="5" step="0.05" value="-0.8" />
+
+      <label>Độ nhòe scan (Blur): <span class="badge" id="blurVal">0.45px</span></label>
+      <input type="range" id="blur" min="0" max="2.0" step="0.05" value="0.45" />
+
+      <label>Độ đậm mực (Opacity): <span class="badge" id="opacityVal">92%</span></label>
+      <input type="range" id="opacity" min="40" max="100" step="1" value="92" />
+
+      <label>Giãn cách chữ (Spacing): <span class="badge" id="spacingVal">0px</span></label>
+      <input type="range" id="spacing" min="-2" max="6" step="0.1" value="0" />
+
+      <div class="row">
+        <div style="flex:1;">
+          <label>Dịch ngang (X): <span class="badge" id="offsetXVal">2</span></label>
+          <input type="range" id="offsetX" min="-60" max="120" step="0.5" value="2" />
+        </div>
+        <div style="flex:1;">
+          <label>Dịch dọc (Y): <span class="badge" id="offsetYVal">0</span></label>
+          <input type="range" id="offsetY" min="-40" max="40" step="0.5" value="0" />
+        </div>
+      </div>
+
+      <button class="btn-primary" id="applyBtn">✅ Áp dụng vết sửa này</button>
+      <div class="row">
+        <button class="btn-secondary" id="undoBtn">↩️ Hoàn tác (Undo)</button>
+        <button class="btn-secondary" id="clearSelBtn">✖ Bỏ khung chọn</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">4. Xuất File Kết Quả</div>
+      <button class="btn-success" id="exportPdfBtn">💾 Tải xuống PDF đã sửa</button>
+      <button class="btn-secondary" id="exportPngBtn">🖼️ Tải ảnh trang hiện tại (.PNG)</button>
+    </div>
+  </div>
+
+  <div id="main-area">
+    <div id="toolbar">
+      <div style="font-size:13px; color:#9ca3af;" id="statusText">Chưa mở file. Hãy chọn 1 file PDF hoặc ảnh để bắt đầu.</div>
+      <div class="row" style="width:auto;">
+        <button class="btn-secondary" id="zoomOutBtn" style="padding:5px 10px;">➖</button>
+        <span class="badge" id="zoomVal" style="min-width:52px; text-align:center;">100%</span>
+        <button class="btn-secondary" id="zoomInBtn" style="padding:5px 10px;">➕</button>
+        <button class="btn-secondary" id="zoomFitBtn" style="padding:5px 10px;">Vừa màn hình</button>
+      </div>
+    </div>
+    <div id="workspace">
+      <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const dropzone = document.getElementById('dropzone');
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let pageImages = {};
+    let historyStack = [];
+    let baseImageData = null;
+    let selection = null;
+    let isDragging = false;
+    let startPt = {x: 0, y: 0};
+    let currentFileName = 'hop_dong_da_sua.pdf';
+    let zoomLevel = 1.0;
+
+    const ids = [
+      'fileInput','pageControls','prevPage','nextPage','pageInfo','inkColor','autoSampleBtn',
+      'newText','fontFamily','isBold','isItalic','fontSize','fontSizeVal','angle','angleVal',
+      'blur','blurVal','opacity','opacityVal','spacing','spacingVal','offsetX','offsetXVal',
+      'offsetY','offsetYVal','applyBtn','undoBtn','clearSelBtn','exportPdfBtn','exportPngBtn',
+      'zoomOutBtn','zoomInBtn','zoomFitBtn','zoomVal','statusText'
+    ];
+    const els = {};
+    ids.forEach(id => els[id] = document.getElementById(id));
+
+    function setZoom(z) {
+      zoomLevel = Math.max(0.3, Math.min(3.0, z));
+      els.zoomVal.textContent = Math.round(zoomLevel * 100) + '%';
+      canvas.style.width = Math.round(canvas.width * zoomLevel) + 'px';
+      canvas.style.height = Math.round(canvas.height * zoomLevel) + 'px';
+    }
+
+    els.zoomInBtn.onclick = () => setZoom(zoomLevel + 0.15);
+    els.zoomOutBtn.onclick = () => setZoom(zoomLevel - 0.15);
+    els.zoomFitBtn.onclick = () => {
+      if (!canvas.width) return;
+      const ws = document.getElementById('workspace');
+      setZoom((ws.clientWidth - 64) / canvas.width);
+    };
+
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    els.fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+
+    async function handleFile(file) {
+      currentFileName = file.name.replace(/\.[^.]+$/, '') + '_da_sua.pdf';
+      els.statusText.textContent = `Đang mở: ${file.name}`;
+      pageImages = {};
+      historyStack = [];
+      selection = null;
+
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const buf = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({data: buf}).promise;
+        currentPage = 1;
+        els.pageControls.style.display = pdfDoc.numPages > 1 ? 'flex' : 'none';
+        await loadPdfPage(currentPage);
+        els.zoomFitBtn.click();
+      } else {
+        pdfDoc = null;
+        els.pageControls.style.display = 'none';
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          pageImages[1] = baseImageData;
+          els.zoomFitBtn.click();
+        };
+        img.src = URL.createObjectURL(file);
+      }
+    }
+
+    async function loadPdfPage(num) {
+      els.pageInfo.textContent = `Trang ${num} / ${pdfDoc.numPages}`;
+      historyStack = [];
+      selection = null;
+      if (pageImages[num]) {
+        canvas.width = pageImages[num].width;
+        canvas.height = pageImages[num].height;
+        baseImageData = pageImages[num];
+        ctx.putImageData(baseImageData, 0, 0);
+        setZoom(zoomLevel);
+        return;
+      }
+      const page = await pdfDoc.getPage(num);
+      const viewport = page.getViewport({scale: 2.4});
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({canvasContext: ctx, viewport}).promise;
+      baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      pageImages[num] = baseImageData;
+      setZoom(zoomLevel);
+    }
+
+    els.prevPage.onclick = () => { if (pdfDoc && currentPage > 1) { currentPage--; loadPdfPage(currentPage); } };
+    els.nextPage.onclick = () => { if (pdfDoc && currentPage < pdfDoc.numPages) { currentPage++; loadPdfPage(currentPage); } };
+
+    function getMousePos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.round((e.clientX - rect.left) * (canvas.width / rect.width)),
+        y: Math.round((e.clientY - rect.top) * (canvas.height / rect.height))
+      };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (!baseImageData) return;
+      isDragging = true;
+      startPt = getMousePos(e);
+      selection = {x: startPt.x, y: startPt.y, w: 1, h: 1};
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging || !baseImageData) return;
+      const pt = getMousePos(e);
+      selection = {
+        x: Math.max(0, Math.min(startPt.x, pt.x)),
+        y: Math.max(0, Math.min(startPt.y, pt.y)),
+        w: Math.max(4, Math.abs(pt.x - startPt.x)),
+        h: Math.max(4, Math.abs(pt.y - startPt.y))
+      };
+      renderPreview(true);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      if (selection && selection.w > 10 && selection.h > 8) {
+        autoDetectInkAndSize();
+        renderPreview(true);
+      }
+    });
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+    }
+
+    function autoDetectInkAndSize() {
+      if (!selection || !baseImageData) return;
+      const {x, y, w, h} = selection;
+      const data = baseImageData.data;
+      const cw = baseImageData.width;
+
+      let darkPixels = [];
+      let minY = h, maxY = 0;
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          const idx = ((y + dy) * cw + (x + dx)) * 4;
+          const r = data[idx], g = data[idx+1], b = data[idx+2];
+          const lum = (r + g + b) / 3;
+          if (lum < 145) {
+            darkPixels.push({r, g, b, lum});
+            if (dy < minY) minY = dy;
+            if (dy > maxY) maxY = dy;
+          }
+        }
+      }
+      if (darkPixels.length > 5) {
+        darkPixels.sort((a, b) => a.lum - b.lum);
+        const topDark = darkPixels.slice(0, Math.max(5, Math.floor(darkPixels.length * 0.25)));
+        const avgR = topDark.reduce((s, p) => s + p.r, 0) / topDark.length;
+        const avgG = topDark.reduce((s, p) => s + p.g, 0) / topDark.length;
+        const avgB = topDark.reduce((s, p) => s + p.b, 0) / topDark.length;
+        els.inkColor.value = rgbToHex(avgR, avgG, avgB);
+        const estSize = Math.max(14, Math.min(64, Math.round((maxY - minY) * 1.12)));
+        els.fontSize.value = estSize;
+        els.fontSizeVal.textContent = estSize;
+      }
+    }
+
+    els.autoSampleBtn.onclick = () => { autoDetectInkAndSize(); renderPreview(true); };
+    els.clearSelBtn.onclick = () => { selection = null; if (baseImageData) ctx.putImageData(baseImageData, 0, 0); };
+
+    function renderPreview(showSelectionBorder = true) {
+      if (!baseImageData) return;
+      ctx.putImageData(baseImageData, 0, 0);
+      if (!selection || selection.w < 5 || selection.h < 5) return;
+
+      const {x, y, w, h} = selection;
+      const cw = baseImageData.width;
+      const ch = baseImageData.height;
+      const src = baseImageData.data;
+
+      const patch = ctx.getImageData(x, y, w, h);
+      const pdata = patch.data;
+
+      for (let dx = 0; dx < w; dx++) {
+        let samples = [];
+        for (let sy of [-4, -3, -2, -1, 0, 1, h-2, h-1, h, h+1, h+2, h+3]) {
+          const py = Math.max(0, Math.min(ch - 1, y + sy));
+          const px = Math.max(0, Math.min(cw - 1, x + dx));
+          const idx = (py * cw + px) * 4;
+          const r = src[idx], g = src[idx+1], b = src[idx+2];
+          if ((r + g + b) / 3 > 200) samples.push([r, g, b]);
+        }
+        let bgR = 250, bgG = 252, bgB = 253;
+        if (samples.length > 0) {
+          samples.sort((a, b) => (a[0]+a[1]+a[2]) - (b[0]+b[1]+b[2]));
+          const mid = samples[Math.floor(samples.length * 0.6)];
+          bgR = mid[0]; bgG = mid[1]; bgB = mid[2];
+        }
+        for (let dy = 0; dy < h; dy++) {
+          const pidx = (dy * w + dx) * 4;
+          const noise = (Math.sin(dx * 12.9898 + dy * 78.233) * 43758.5453 % 1) * 1.6 - 0.8;
+          pdata[pidx]   = Math.min(255, Math.max(0, bgR + noise));
+          pdata[pidx+1] = Math.min(255, Math.max(0, bgG + noise));
+          pdata[pidx+2] = Math.min(255, Math.max(0, bgB + noise));
+          pdata[pidx+3] = 255;
+        }
+      }
+      ctx.putImageData(patch, x, y);
+
+      const text = els.newText.value;
+      if (text) {
+        const fSize = parseFloat(els.fontSize.value);
+        const angleDeg = parseFloat(els.angle.value);
+        const blurPx = parseFloat(els.blur.value);
+        const alpha = parseFloat(els.opacity.value) / 100;
+        const spacingPx = parseFloat(els.spacing.value);
+        const offX = parseFloat(els.offsetX.value);
+        const offY = parseFloat(els.offsetY.value);
+        const style = `${els.isItalic.checked ? 'italic ' : ''}${els.isBold.checked ? 'bold ' : ''}${fSize}px ${els.fontFamily.value}`;
+
+        ctx.save();
+        ctx.translate(x + offX, y + h * 0.76 + offY);
+        ctx.rotate(angleDeg * Math.PI / 180);
+        if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = els.inkColor.value;
+        ctx.font = style;
+        ctx.letterSpacing = spacingPx + 'px';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+
+      if (showSelectionBorder) {
+        ctx.save();
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
+      }
+    }
+
+    ['newText', 'fontFamily', 'isBold', 'isItalic', 'inkColor', 'fontSize', 'angle', 'blur', 'opacity', 'spacing', 'offsetX', 'offsetY'].forEach(id => {
+      els[id].addEventListener('input', () => {
+        els.fontSizeVal.textContent = els.fontSize.value;
+        els.angleVal.textContent = els.angle.value + '°';
+        els.blurVal.textContent = els.blur.value + 'px';
+        els.opacityVal.textContent = els.opacity.value + '%';
+        els.spacingVal.textContent = els.spacing.value + 'px';
+        els.offsetXVal.textContent = els.offsetX.value;
+        els.offsetYVal.textContent = els.offsetY.value;
+        renderPreview(true);
+      });
+    });
+
+    els.applyBtn.onclick = () => {
+      if (!baseImageData || !selection) return;
+      historyStack.push(baseImageData);
+      renderPreview(false);
+      baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      pageImages[currentPage] = baseImageData;
+      selection = null;
+      els.statusText.textContent = 'Đã áp dụng vết sửa. Bạn có thể khoanh vùng tiếp theo hoặc bấm Tải xuống PDF.';
+    };
+
+    els.undoBtn.onclick = () => {
+      if (historyStack.length === 0) return;
+      baseImageData = historyStack.pop();
+      pageImages[currentPage] = baseImageData;
+      ctx.putImageData(baseImageData, 0, 0);
+      selection = null;
+    };
+
+    els.exportPngBtn.onclick = () => {
+      if (!baseImageData) return;
+      renderPreview(false);
+      const a = document.createElement('a');
+      a.download = currentFileName.replace(/\.pdf$/, '') + `_trang_${currentPage}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+
+    els.exportPdfBtn.onclick = async () => {
+      if (!baseImageData) return;
+      els.statusText.textContent = 'Đang xuất file PDF...';
+      if (selection) {
+        renderPreview(false);
+        baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        pageImages[currentPage] = baseImageData;
+        selection = null;
+      }
+      const { jsPDF } = window.jspdf;
+      const totalPages = pdfDoc ? pdfDoc.numPages : 1;
+      let pdfOut = null;
+
+      for (let p = 1; p <= totalPages; p++) {
+        if (!pageImages[p] && pdfDoc) {
+          await loadPdfPage(p);
+        }
+        const imgData = pageImages[p];
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = imgData.width;
+        tmpCanvas.height = imgData.height;
+        tmpCanvas.getContext('2d').putImageData(imgData, 0, 0);
+        const jpegUrl = tmpCanvas.toDataURL('image/jpeg', 0.92);
+
+        const orientation = imgData.width > imgData.height ? 'l' : 'p';
+        const ptW = imgData.width * 0.35;
+        const ptH = imgData.height * 0.35;
+        if (p === 1) {
+          pdfOut = new jsPDF({orientation, unit: 'pt', format: [ptW, ptH]});
+        } else {
+          pdfOut.addPage([ptW, ptH], orientation);
+        }
+        pdfOut.addImage(jpegUrl, 'JPEG', 0, 0, ptW, ptH);
+      }
+      pdfOut.save(currentFileName);
+      els.statusText.textContent = `Đã tải xuống: ${currentFileName}`;
+    };
+  </script>
+</body>
+</html>
